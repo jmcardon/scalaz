@@ -29,8 +29,8 @@ object Dup extends DupInstances {
   RegionT[S, P, FinalizerHandle[RegionT[S, P, ?]]] = h match {
     case h =>
       RegionT(Kleisli(hsIORef => (for {
-        _ <- h.finalizer.refcount.mod(_ + 1)
-        _ <- hsIORef.mod(h.finalizer :: _)
+        _ <- h.finalizer.refcount.modify(_ + 1)
+        _ <- hsIORef.modify(h.finalizer :: _)
       } yield FinalizerHandle[RegionT[S, P, ?]](h.finalizer)).liftIO[P]))
   }
 }

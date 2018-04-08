@@ -4,7 +4,7 @@ package iteratee
 import std.AllInstances._
 import Free.Trampoline
 import Iteratee._
-import effect._
+import effect.{MonadIO, _}
 import Id._
 
 object IterateeTTest extends SpecLite {

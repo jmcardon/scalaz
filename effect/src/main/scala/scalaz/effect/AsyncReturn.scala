@@ -1,5 +1,6 @@
 // Copyright (C) 2017 John A. De Goes. All rights reserved.
-package scalaz.effect
+package scalaz
+package effect
 
 /**
   * The `AsyncReturn` class describes the return value of an asynchronous effect

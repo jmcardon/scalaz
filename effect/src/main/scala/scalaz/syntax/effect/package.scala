@@ -1,4 +1,5 @@
-package scalaz.syntax
+package scalaz
+package syntax
 
 /**
  * Implicits to provide a convenient syntax to work with type classes

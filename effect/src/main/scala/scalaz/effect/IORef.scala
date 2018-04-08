@@ -1,26 +1,43 @@
+// Copyright (C) 2017 John A. De Goes. All rights reserved.
 package scalaz
 package effect
 
-import ST._
-
 /**
- * A mutable reference in the IO monad. Note that unsafePerformIO will allow leaking
- * such a reference out of the monad, but any operations on a leaked reference are still monadic.
- */
-sealed abstract class IORef[A] {
-  val value: STRef[IvoryTower, A]
+  * A high-performance, mutable reference for the `IO` monad. This is the `IO`
+  * equivalent of a volatile `var`, and is useful for mutable references inside
+  * a single fiber, not communication between fibers. For communication between
+  * fibers, see `MVar`.
+  *
+  * {{{
+  * for {
+  *   ref <- IORef(2)
+  *   v   <- ref.modify(_ + 3)
+  *   _   <- putStrLn("Value = " + v.debug) // Value = 5
+  * } yield ()
+  * }}}
+  */
+final class IORef[A] private (@volatile private var value: A) {
 
-  def read: IO[A] = STToIO(value.read)
+  /**
+    * Reads the value from the `IORef`.
+    */
+  final def read: IO[A] = IO.sync(value)
 
-  def write(a: => A): IO[Unit] = STToIO(value.write(a) map (_ => ()))
+  /**
+    * Writes a new value to the `IORef`.
+    */
+  final def write(a: A): IO[Unit] = IO.sync(this.value = a)
 
-  def mod(f: A => A): IO[A] = STToIO(value.mod(f) flatMap (_.read))
+  /**
+    * Modifies the `IORef` with the specified function.
+    */
+  final def modify(f: A => A): IO[A] = IO.sync({ value = f(value); value })
 }
 
-object IORef extends IORefs
+object IORef {
 
-trait IORefs {
-  def ioRef[A](v: STRef[IvoryTower, A]): IORef[A] = new IORef[A] {
-    val value = v
-  }
+  /**
+    * Creates a new `IORef` with the specified value.
+    */
+  final def apply[A](a: A): IO[IORef[A]] = IO.sync(new IORef[A](a))
 }

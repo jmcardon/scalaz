@@ -1,7 +1,7 @@
 package scalaz
 package std.effect
 
-import effect.Resource
+import scalaz.effect.Resource
 
 trait AutoCloseableInstances {
   implicit def autoCloseableResource[A <: java.lang.AutoCloseable]: Resource[A] =

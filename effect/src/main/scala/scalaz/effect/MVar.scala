@@ -65,3 +65,15 @@ trait MVar[A] {
     */
   def tryTake: IO[Option[A]]
 }
+
+object MVar extends MVarFunctions
+
+trait MVarFunctions {
+  def newMVar[A](a: A): IO[MVar[A]] =
+    for {
+      mvar <- newEmptyMVar[A]
+      _    <- mvar.put(a)
+    } yield mvar
+
+  def newEmptyMVar[A]: IO[MVar[A]] = ???
+}

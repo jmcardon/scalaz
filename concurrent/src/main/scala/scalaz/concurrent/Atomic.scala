@@ -1,9 +1,9 @@
 package scalaz
 package concurrent
 
-import effect._
-
 import java.util.concurrent.atomic.AtomicReference
+
+import scalaz.effect.IO
 
 trait Atomic[A] {
   def compareAndSet(expected: A, newValue: A): IO[Boolean]
@@ -14,7 +14,7 @@ trait Atomic[A] {
   def update(f: A => A): IO[A] = get flatMap { a =>
     val b = f(a)
     compareAndSet(a, b) flatMap { s =>
-      if (s) IO(b)
+      if (s) IO.point(b)
       else update(f)
     }
   }
@@ -23,12 +23,12 @@ trait Atomic[A] {
 object Atomic extends Atomics
 
 trait Atomics {
-  def newAtomic[A](a: A): IO[Atomic[A]] = IO(new Atomic[A] {
+  def newAtomic[A](a: A): IO[Atomic[A]] = IO.point(new Atomic[A] {
     val value = new AtomicReference(a)
 
-    def compareAndSet(expected: A, newValue: A) = IO(value.compareAndSet(expected, newValue))
-    def get = IO(value.get)
-    def getAndSet(a: A) = IO(value.getAndSet(a))
-    def set(a: => A) = IO(value.set(a))
+    def compareAndSet(expected: A, newValue: A) = IO.point(value.compareAndSet(expected, newValue))
+    def get = IO.point(value.get)
+    def getAndSet(a: A) = IO.point(value.getAndSet(a))
+    def set(a: => A) = IO.point(value.set(a))
   })
 }

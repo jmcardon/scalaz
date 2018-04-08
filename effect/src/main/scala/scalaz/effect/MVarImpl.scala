@@ -3,10 +3,10 @@ package scalaz.effect
 
 import java.util.concurrent.atomic.AtomicReference
 
-import MVarInternal._
+import scalaz.effect.MVarInternal._
 import scalaz.{-\/, \/, \/-}
 
-private[effect] final class MVarImpl[A](
+private[concurrent] final class MVarImpl[A](
     threadPool: (=> Unit) => Unit,
     val state: AtomicReference[MVarState[A]])
     extends MVar[A] {
@@ -264,7 +264,7 @@ private[effect] final class MVarImpl[A](
   }
 }
 
-private[effect] object MVarInternal {
+private[concurrent] object MVarInternal {
   val SuccessUnit: Try[Unit] = \/-(())
 
   type Action[A] = () => AsyncReturn[A]

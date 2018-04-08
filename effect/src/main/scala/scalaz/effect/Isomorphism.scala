@@ -1,8 +1,8 @@
-package scalaz
-package effect
+package scalaz.effect
 
+import scalaz.Isomorphism.{<=>, <~>}
 import scalaz.IsomorphismMonad
-import scalaz.Isomorphism.{<~>, <=>}
+import scalaz.effect.IO._
 
 //
 // Derive a type class instance through an Isomorphism for the effect type classes
@@ -37,7 +37,6 @@ trait IsomorphismMonadCatchIO[F[_], G[_]] extends MonadCatchIO[F] with Isomorphi
 }
 
 trait IsomorphismLiftControlIO[F[_], G[_]] extends LiftControlIO[F] {
-  import IO._
 
   implicit def G: LiftControlIO[G]
 

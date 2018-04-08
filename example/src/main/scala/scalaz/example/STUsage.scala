@@ -1,5 +1,7 @@
 package scalaz.example
 
+import scalaz.effect.effect.ST
+
 import reflect.ClassTag
 
 object STUsage extends App {

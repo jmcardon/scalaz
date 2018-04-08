@@ -1,7 +1,6 @@
 // Copyright (C) 2017 John A. De Goes. All rights reserved.
-package scalaz.effect
-
-import scalaz.\/
+package scalaz
+package effect
 
 import scala.concurrent.duration.Duration
 

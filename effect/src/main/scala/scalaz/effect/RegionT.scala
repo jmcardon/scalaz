@@ -1,7 +1,7 @@
 package scalaz
 package effect
 
-import Kleisli._
+import scalaz.Kleisli.kleisli
 
 // An implementation of "Lightweight Monadic Regions" by Kiselyov and Shan
 // http://okmij.org/ftp/Haskell/regions.html#light-weight

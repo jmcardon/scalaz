@@ -15,7 +15,7 @@ import scalaz.{-\/, \/, \/-}
   * This trait provides a high-performance implementation of a runtime system for
   * the `IO` monad on the JVM.
   */
-trait RTS {
+private [effect] trait RTS {
   import RTS._
 
   /**
@@ -1054,7 +1054,7 @@ private object RTS {
 
         case AsyncRegion(_, resume, cancelOpt, joiners, killers)
             if (resume > 0 && noInterrupt == 0) =>
-          val v = -\/[Throwable, A](t)
+          val v = -\/[Throwable](t)
 
           if (!status.compareAndSet(oldStatus, Done(v))) kill0(t, cb)
           else {

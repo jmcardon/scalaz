@@ -1,23 +1,34 @@
-package scalaz
-package effect
-
-import IO._
+// Copyright (C) 2017 John A. De Goes. All rights reserved.
+package scalaz.effect
 
 /**
- * A safe alternative to the `App` trait in the Scala standard library. This
- * trait provides an implementation of the `main` method by calling
- * `unsafePerformIO` on a specified `IO` action.
- */
-trait SafeApp {
+  * The entry point for a purely-functional application on the JVM.
+  *
+  * {{{
+  * import scalaz.effect.{IO, SafeApp}
+  * import scalaz.effect.console._
+  *
+  * object MyApp extends SafeApp {
+  *   def run(args: List[String]): IO[Unit] =
+  *     for {
+  *       _ <- putStrLn("Hello! What is your name?")
+  *       n <- getStrLn
+  *       _ <- putStrLn("Hello, " + n + ", good to meet you!")
+  *     } yield ()
+  * }
+  * }}}
+  */
+trait SafeApp extends RTS {
 
-  def run(args: ImmutableArray[String]): IO[Unit] = runl(args.toList)
+  /**
+    * The main function of the application, which will be passed the command-line
+    * arguments to the program.
+    */
+  def run(args: List[String]): IO[Unit]
 
-  def runl(args: List[String]): IO[Unit] = runc
-
-  def runc: IO[Unit] = ioUnit
-
-  final def main(args: Array[String]): Unit = {
-    run(ImmutableArray.fromArray(args)).unsafePerformIO()
-  }
-
+  /**
+    * The Scala main function, intended to be called only by the Scala runtime.
+    */
+  final def main(args0: Array[String]): Unit =
+    unsafePerformIO(run(args0.toList))
 }

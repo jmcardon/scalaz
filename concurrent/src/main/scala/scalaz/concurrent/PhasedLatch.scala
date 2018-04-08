@@ -1,10 +1,9 @@
 package scalaz
 package concurrent
 
-import effect.IO
-
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.AbstractQueuedSynchronizer
+import scalaz.effect.IO
 
 sealed abstract class PhasedLatch {
   /** Release the current phase. */
@@ -41,7 +40,7 @@ trait PhasedLatches {
     }
   }
 
-  def newPhasedLatch: IO[PhasedLatch] = IO(new PhasedLatch {
+  def newPhasedLatch: IO[PhasedLatch] = IO.point(new PhasedLatch {
     /** This sync implements Phasing. The state represents the current phase as
      *  an integer that continually increases. The phase can wrap around past
      *  Int#MaxValue
@@ -64,17 +63,17 @@ trait PhasedLatches {
     val sync = new QueuedSynchronizer
 
     /** Release the current phase. */
-    def release = IO { sync releaseShared 1 }
+    def release = IO.point { sync releaseShared 1 }
 
     /** Await for the specified phase.*/
     @throws(classOf[InterruptedException])
-    def awaitPhase(phase: Int) = IO { sync acquireSharedInterruptibly phase }
+    def awaitPhase(phase: Int) = IO.point { sync acquireSharedInterruptibly phase }
 
     @throws(classOf[InterruptedException])
-    def awaitPhaseFor(phase: Int, period: Long, unit: TimeUnit) = IO {
+    def awaitPhaseFor(phase: Int, period: Long, unit: TimeUnit) = IO.point {
       sync.tryAcquireSharedNanos(phase, unit.toNanos(period))
     }
 
-    def currentPhase = IO(sync.currentPhase)
+    def currentPhase = IO.point(sync.currentPhase)
   })
 }

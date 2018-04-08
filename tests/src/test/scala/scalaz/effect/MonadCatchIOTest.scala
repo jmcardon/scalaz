@@ -1,7 +1,7 @@
 package scalaz
 package effect
 
-import java.io.{ StringReader, IOException }
+import java.io.{IOException, StringReader}
 
 object MonadCatchIOTest extends SpecLite {
   import Kleisli.kleisli
