@@ -33,10 +33,10 @@ object Resource {
     }
 
   def resourceFromAutoCloseable[A <: java.lang.AutoCloseable]: Resource[A] =
-    resource(a => IO(a.close()))
+    resource(a => IO.sync(a.close()))
 
   def resourceFromCloseable[A <: Closeable]: Resource[A] =
-    resource(a => IO(a.close))
+    resource(a => IO.sync(a.close))
 
   implicit val contravariant: Contravariant[Resource] =
     new Contravariant[Resource] {

@@ -36,11 +36,11 @@ object IOTest extends SpecLite {
     }
 
     "catch ambient exceptions" in {
-      C.attempt(IO(throw err)).unsafePerformIO must_== -\/(err)
+      C.attempt(IO.sync(throw err)).unsafePerformIO must_== -\/(err)
     }
 
     "properly handle success" in {
-      C.attempt(IO(3)).unsafePerformIO must_== \/-(3)
+      C.attempt(IO.sync(3)).unsafePerformIO must_== \/-(3)
     }
 
   }

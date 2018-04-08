@@ -184,7 +184,7 @@ object KleisliTest extends SpecLite {
     }
 
     "properly handle success" in {
-      C.attempt(Kleisli(n => IO(n + 2))).run(1).unsafePerformIO must_== \/-(3)
+      C.attempt(Kleisli(n => IO.sync(n + 2))).run(1).unsafePerformIO must_== \/-(3)
     }
 
   }

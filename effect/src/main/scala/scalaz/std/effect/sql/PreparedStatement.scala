@@ -7,7 +7,7 @@ import java.sql.PreparedStatement
 
 trait PreparedStatementInstances {
   implicit val preparedStatementResource: Resource[PreparedStatement] = new Resource[PreparedStatement] {
-    def close(r: PreparedStatement) = IO(r.close)
+    def close(r: PreparedStatement) = IO.sync(r.close)
   }
 }
 

@@ -58,7 +58,7 @@ private[this] class MVarImpl[A](value: Atomic[Option[A]], readLatch: PhasedLatch
         p <- readLatch.currentPhase
         r <- reader
         a <- r match {
-          case Some(a) => IO(a)
+          case Some(a) => IO.sync(a)
           case None =>
             for {
               _ <- readLatch.awaitPhase(p) // we don't have a value so we wait for someone to put one

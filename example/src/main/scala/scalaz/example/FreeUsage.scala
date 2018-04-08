@@ -70,7 +70,7 @@ object FreeUsage extends App {
   // Syntax
   implicit class RngOps[A](ma: Rng[A]) {
     def exec(seed: Long): A = runRng(ma, seed)
-    def liftIO: IO[A] = IO(System.currentTimeMillis).map(exec)
+    def liftIO: IO[A] = IO.sync(System.currentTimeMillis).map(exec)
   }
 
   // An example that returns a pair of integers, a < 100, b < a and a color

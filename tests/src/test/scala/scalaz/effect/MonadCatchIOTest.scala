@@ -15,8 +15,8 @@ object MonadCatchIOTest extends SpecLite {
 
   // A simple type that's not IO but does have a MonadCatchIO
   type T[A] = Kleisli[IO, Int, A]
-  def ok[A](a: A): T[A] = kleisli(n => IO(a))
-  def fail[A](e: Throwable): T[A] = kleisli(n => IO(throw e))
+  def ok[A](a: A): T[A] = kleisli(n => IO.sync(a))
+  def fail[A](e: Throwable): T[A] = kleisli(n => IO.fail(e))
 
   // given two functions to take T[A] => T[B], the first using MonadCatchIO and the second
   // using syntax, return a function that consumes a T[A] and evaluates the corresponding T[B]

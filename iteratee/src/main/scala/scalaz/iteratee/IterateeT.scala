@@ -226,7 +226,7 @@ trait IterateeTFunctions {
    * An iteratee that writes input to the output stream as it comes in.  Useful for debugging.
    */
   def putStrTo[E](os: java.io.OutputStream)(implicit s: Show[E]): IterateeT[E, IO, Unit] = {
-    def write(e: E) = IO(os.write(s.shows(e).getBytes))
+    def write(e: E) = IO.sync(os.write(s.shows(e).getBytes))
     foldM(())((_: Unit, e: E) => write(e))
   }
 

@@ -21,7 +21,7 @@ package scalaz.effect
   * } yield i
   * }}}
   */
-trait MVar[A] {
+trait IOMVar[A] {
 
   /**
     * Peeks to see if the `MVar` contains an value. This method returns

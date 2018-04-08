@@ -1,9 +1,8 @@
 // Copyright (C) 2017 John A. De Goes. All rights reserved.
 package scalaz.effect
 
-import scalaz.\/
-
 import scala.concurrent.duration.Duration
+import scalaz.\/
 
 object Errors {
   final case class TimeoutException(duration: Duration)
