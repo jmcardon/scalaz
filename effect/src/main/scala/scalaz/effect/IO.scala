@@ -70,7 +70,7 @@ sealed abstract class IO[A] extends RTS { self =>
     * (`io.map(f1).map(f2)...map(f10000)`) are guaranteed stack safe to a depth
     * of at least 10,000.
     */
-  final def map[B](f: A => B): IO[B] = (self.tag: @switch) match {
+  def map[B](f: A => B): IO[B] = (self.tag: @switch) match {
     case IO.Tags.Point =>
       val io = self.asInstanceOf[IO.Point[A]]
 
@@ -99,7 +99,7 @@ sealed abstract class IO[A] extends RTS { self =>
     * val parsed = readFile("foo.txt").flatMap(file => parseFile(file))
     * }}}
     */
-  final def flatMap[B](f0: A => IO[B]): IO[B] = (self.tag: @switch) match {
+  def flatMap[B](f0: A => IO[B]): IO[B] = (self.tag: @switch) match {
     case IO.Tags.Fail => self.asInstanceOf[IO[B]]
     case _            => IO.FlatMap(self, f0)
   }
@@ -506,7 +506,7 @@ sealed abstract class IO[A] extends RTS { self =>
     * An integer that identifies the term in the `IO` sum type to which this
     * instance belongs (e.g. `IO.Tags.Point`).
     */
-  def tag: Int
+  def tag: Int = IO.Tags.Fail //Necessary since MiMa :(
 
 }
 
