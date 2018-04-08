@@ -7,7 +7,7 @@ import java.sql.Connection
 
 trait ConnectionInstances {
   implicit val connectionResource: Resource[Connection] = new Resource[Connection] {
-    def close(r: Connection) = IO(r.close)
+    def close(r: Connection) = IO.sync(r.close)
   }
 }
 
