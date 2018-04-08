@@ -1,9 +1,9 @@
 package scalaz
 package std.effect
 
-import java.io.Closeable
+import effect.Resource
 
-import scalaz.effect.Resource
+import java.io.Closeable
 
 trait CloseableInstances {
   implicit def closeableResource[A <: Closeable]: Resource[A] =

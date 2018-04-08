@@ -1,8 +1,6 @@
 package scalaz
 package effect
 
-import scalaz.effect.IO.RunInBase
-
 ////
 /**
  *
@@ -10,6 +8,7 @@ import scalaz.effect.IO.RunInBase
 ////
 trait LiftControlIO[F[_]]  { self =>
   ////
+  import IO._
 
   def liftControlIO[A](f: RunInBase[F, IO] => IO[A]): F[A]
 

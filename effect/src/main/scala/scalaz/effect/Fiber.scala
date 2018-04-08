@@ -1,6 +1,5 @@
 // Copyright (C) 2017 John A. De Goes. All rights reserved.
-package scalaz
-package effect
+package scalaz.effect
 
 /**
   * A fiber is a lightweight thread of execution that never consumes more than a

@@ -1,7 +1,9 @@
+
 package scalaz
 package effect
 
 import std.AllInstances._
+import ST._
 
 object STTest extends SpecLite {
   type ForallST[A] = Forall[ST[?, A]]

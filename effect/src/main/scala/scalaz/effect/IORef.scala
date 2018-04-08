@@ -1,43 +1,31 @@
-// Copyright (C) 2017 John A. De Goes. All rights reserved.
 package scalaz
 package effect
 
+import java.util.concurrent.atomic.AtomicReference
+
+import ST._
+
 /**
-  * A high-performance, mutable reference for the `IO` monad. This is the `IO`
-  * equivalent of a volatile `var`, and is useful for mutable references inside
-  * a single fiber, not communication between fibers. For communication between
-  * fibers, see `MVar`.
-  *
-  * {{{
-  * for {
-  *   ref <- IORef(2)
-  *   v   <- ref.modify(_ + 3)
-  *   _   <- putStrLn("Value = " + v.debug) // Value = 5
-  * } yield ()
-  * }}}
+  * A mutable reference in the IO monad. Note that unsafePerformIO will allow leaking
+  * such a reference out of the monad, but any operations on a leaked reference are still monadic.
   */
-final class IORef[A] private (@volatile private var value: A) {
+sealed abstract class IORef[A] {
+  val value: STRef[IvoryTower, A]
 
-  /**
-    * Reads the value from the `IORef`.
-    */
-  final def read: IO[A] = IO.sync(value)
+  def read: IO[A] =
+    STToIO(value.read)
 
-  /**
-    * Writes a new value to the `IORef`.
-    */
-  final def write(a: A): IO[Unit] = IO.sync(this.value = a)
+  def write(a: => A): IO[Unit] =
+    STToIO(value.write(a) map (_ => ()))
 
-  /**
-    * Modifies the `IORef` with the specified function.
-    */
-  final def modify(f: A => A): IO[A] = IO.sync({ value = f(value); value })
+  def mod(f: A => A): IO[A] =
+    STToIO(value.mod(f) flatMap (_.read))
 }
 
-object IORef {
+object IORef extends IORefs
 
-  /**
-    * Creates a new `IORef` with the specified value.
-    */
-  final def apply[A](a: A): IO[IORef[A]] = IO.sync(new IORef[A](a))
+trait IORefs {
+  def ioRef[A](v: STRef[IvoryTower, A]): IORef[A] = new IORef[A] {
+    val value = v
+  }
 }

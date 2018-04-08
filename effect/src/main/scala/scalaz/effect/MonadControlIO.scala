@@ -1,7 +1,6 @@
 package scalaz
 package effect
 
-
 ////
 /**
  *

@@ -1,21 +1,19 @@
 // Copyright (C) 2017 John A. De Goes. All rights reserved.
 package scalaz.effect
 
-import scala.annotation.switch
-import scala.annotation.tailrec
-import scala.concurrent.duration.Duration
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.{Executors, TimeUnit}
-import java.lang.{Runnable, Runtime}
 
+import scala.annotation.{switch, tailrec}
+import scala.concurrent.duration.Duration
 import scalaz.{-\/, \/, \/-}
 
 /**
   * This trait provides a high-performance implementation of a runtime system for
   * the `IO` monad on the JVM.
   */
-private [effect] trait RTS {
+private[effect] trait RTS {
   import RTS._
 
   /**
@@ -196,9 +194,11 @@ private object RTS {
     */
   final class FiberContext[A](rts: RTS, val unhandled: Throwable => IO[Unit])
       extends Fiber[A] {
-    import FiberStatus._
     import java.util.{Collections, Set, WeakHashMap}
+
     import rts.{MaxResumptionDepth, YieldMaxOpCount}
+
+    import FiberStatus._
 
     // Accessed from multiple threads:
     private[this] val status =
@@ -1054,7 +1054,7 @@ private object RTS {
 
         case AsyncRegion(_, resume, cancelOpt, joiners, killers)
             if (resume > 0 && noInterrupt == 0) =>
-          val v = -\/[Throwable](t)
+          val v: Throwable \/ A = -\/[Throwable](t)
 
           if (!status.compareAndSet(oldStatus, Done(v))) kill0(t, cb)
           else {

@@ -2,11 +2,12 @@ package scalaz
 package std.effect.sql
 
 import effect.{IO, Resource}
+
 import java.sql.Statement
 
 trait StatementInstances {
   implicit val statementResource: Resource[Statement] = new Resource[Statement] {
-    def close(r: Statement) = IO.now(r.close)
+    def close(r: Statement) = IO.sync(r.close)
   }
 }
 

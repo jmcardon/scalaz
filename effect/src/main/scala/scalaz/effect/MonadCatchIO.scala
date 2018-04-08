@@ -1,7 +1,6 @@
 package scalaz
 package effect
 
-
 trait MonadCatchIO[M[_]] extends MonadIO[M] {
   /** Executes the handler if an exception is raised. */
   def except[A](ma: M[A])(handler: Throwable => M[A]): M[A]

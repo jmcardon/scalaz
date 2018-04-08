@@ -1,12 +1,16 @@
-// Copyright (C) 2017 John A. De Goes. All rights reserved.
 package scalaz
 package effect
 
-import scalaz.Isomorphism.{<=>, <~>}
-import scalaz.IsomorphismMonad
+import IvoryTower._
+import RegionT._
+import RefCountedFinalizer._
+import FinalizerHandle._
+import ST._
+import Kleisli._
+import Free._
 import scala.annotation.switch
 import scala.concurrent.duration.Duration
-
+import std.function._
 
 /**
   * An `IO[A]` ("Eye-Oh of A") is an immutable data structure that describes an
@@ -41,13 +45,24 @@ import scala.concurrent.duration.Duration
   * `SafeApp`.
   */
 sealed abstract class IO[A] extends RTS { self =>
+  private[effect] def apply(
+      rw: Tower[IvoryTower]): Trampoline[(Tower[IvoryTower], A)] =
+    Free.liftF(() => (rw, unsafePerformIO(this)))
+
+  import IO._
 
   /**
-    * Effectfully and synchronously interprets an `IO[A]`, either throwing an
-    * error, running forever, or producing an `A`.
+    * Runs I/O and performs side-effects. An unsafe operation.
+    * Do not call until the end of the universe.
     */
-  final def unsafePerformIO: A =
-    unsafePerformIO(self)
+  def unsafePerformIO(): A = unsafePerformIO(self)
+
+  /**
+    * Constructs an IO action whose steps may be interleaved with another.
+    * An unsafe operation, since it exposes a trampoline that allows one to
+    * step through the components of the IO action.
+    */
+  def unsafeInterleaveIO(): IO[Trampoline[A]] = IO.sync(apply(ivoryTower).map(_._2))
 
   /**
     * Maps an `IO[A]` into an `IO[B]` by applying the specified `A => B` function
@@ -76,8 +91,6 @@ sealed abstract class IO[A] extends RTS { self =>
     case _ => IO.FlatMap(self, (a: A) => IO.Strict(f(a)))
   }
 
-
-
   /**
     * Creates a composite action that represents this action followed by another
     * one that may depend on the value produced by this one.
@@ -90,6 +103,178 @@ sealed abstract class IO[A] extends RTS { self =>
     case IO.Tags.Fail => self.asInstanceOf[IO[B]]
     case _            => IO.FlatMap(self, f0)
   }
+
+  /**
+    * Interleaves the steps of this IO action with the steps of another,
+    * consuming the results of both with the given function.
+    */
+  def unsafeZipWith[B, C](iob: IO[B], f: (A, B) => C): IO[C] =
+    for {
+      a <- self
+      b <- iob
+    } yield f(a, b)
+
+  /**
+    * Interleaves the steps of this IO action with the steps of another,
+    * yielding the results of both.
+    */
+  def unsafeZip[B](iob: IO[B]): IO[(A, B)] = unsafeZipWith(iob, Tuple2[A, B])
+
+  /**
+    * Interleaves the steps of this IO action with the steps of another,
+    * ignoring the result of this action.
+    */
+  def unsafeZip_[B](iob: IO[B]): IO[B] = unsafeZipWith(iob, (a: A, b: B) => b)
+
+  /** Lift this action to a given IO-like monad. */
+  def liftIO[M[_]](implicit m: MonadIO[M]): M[A] =
+    m.liftIO(this)
+
+  /** Executes the handler if an exception is raised. */
+  @deprecated("use catchAll", "7.2.blah")
+  def except(handler: Throwable => IO[A]): IO[A] = catchAll(handler)
+
+  /**
+    * Executes the handler for exceptions that are raised and match the given predicate.
+    * Other exceptions are rethrown.
+    */
+  def catchSome[B](p: Throwable => Option[B], handler: B => IO[A]): IO[A] =
+    catchAll(e =>
+      p(e) match {
+        case Some(z) => handler(z)
+        case None    => IO.fail(e)
+    })
+
+  /**
+    * Returns a disjunction result which is right if no exception was raised, or left if an
+    * exception was raised.
+    */
+  @deprecated("use attempt", "7.2.blah")
+  def catchLeft: IO[Throwable \/ A] = attempt
+
+  /**Like "catchLeft" but takes a predicate to select which exceptions are caught. */
+  def catchSomeLeft[B](p: Throwable => Option[B]): IO[B \/ A] =
+    attempt.flatMap[B \/ A] {
+      case \/-(r) => IO.now(\/-(r))
+      case -\/(l) =>
+        p(l) match {
+          case Some(e) => IO.now(-\/(e))
+          case None    => IO.fail(l)
+        }
+    }
+
+  /**Like "finally", but only performs the final action if there was an exception. */
+  def onException[B](action: IO[B]): IO[A] =
+    self.catchAll(e =>
+      for {
+        _ <- action
+        a <- IO.fail[A](e)
+      } yield a)
+
+  /**
+    * Applies the "during" action, calling "after" regardless of whether there was an exception.
+    * All exceptions are rethrown. Generalizes try/finally.
+    */
+  def bracket[B, C](after: A => IO[B])(during: A => IO[C]): IO[C] =
+    IO.Bracket(this, (_: BracketResult[C], a: A) => after(a).toUnit, during)
+
+  /**
+    * When this action represents acquisition of a resource (for example,
+    * opening a file, launching a thread, etc.), `bracket` can be used to ensure
+    * the acquisition is not interrupted and the resource is released.
+    *
+    * The function does two things:
+    *
+    * 1. Ensures this action, which acquires the resource, will not be
+    * interrupted. Of course, acquisition may fail for internal reasons (an
+    * uncaught exception).
+    * 2. Ensures the `release` action will not be interrupted, and will be
+    * executed so long as this action successfully acquires the resource.
+    *
+    * In between acquisition and release of the resource, the `use` action is
+    * executed.
+    *
+    * If the `release` action fails, then the entire computation will fail even
+    * if the `use` action succeeds. If this fail-fast behavior is not desired,
+    * errors produced by the `release` action can be caught and ignored.
+    *
+    * {{{
+    * openFile("data.json").bracket(closeFile) { file =>
+    *   for {
+    *     header <- readHeader(file)
+    *     ...
+    *   } yield result
+    * }
+    * }}}
+    */
+  final def bracket8[B](release: A => IO[Unit])(use: A => IO[B]): IO[B] =
+    IO.Bracket(this, (_: BracketResult[B], a: A) => release(a), use)
+
+  /**
+    * A more powerful version of `bracket` that provides information on whether
+    * or not `use` succeeded to the release action.
+    */
+  final def bracket0[B](release: (BracketResult[B], A) => IO[Unit])(
+      use: A => IO[B]): IO[B] =
+    IO.Bracket(this, release, use)
+
+  /**
+    * A less powerful variant of `bracket` where the value produced by this
+    * action is not needed.
+    */
+  final def bracket8_[B](release: IO[Unit])(use: IO[B]): IO[B] =
+    self.bracket(_ => release)(_ => use)
+
+  /**A variant of "bracket" where the return value of this computation is not needed. */
+  def bracket_[B, C](after: IO[B])(during: IO[C]): IO[C] =
+    bracket(_ => after)(_ => during)
+
+  /**A variant of "bracket" that performs the final action only if there was an error. */
+  def bracketOnError[B, C](after: A => IO[B])(during: A => IO[C]): IO[C] =
+    bracket0(
+      (r: BracketResult[C], a: A) =>
+        r match {
+          case BracketResult.Failed(_)      => after(a).toUnit
+          case BracketResult.Interrupted(_) => after(a).toUnit
+          case _                            => IO.unit
+      }
+    )(during)
+
+  def bracketIO[M[_], B](after: A => IO[Unit])(during: A => M[B])(
+      implicit m: MonadControlIO[M]): M[B] =
+    controlIO((runInIO: RunInBase[M, IO]) =>
+      bracket(after)(runInIO.apply compose during))
+
+  /** An automatic resource management. */
+  def using[C](f: A => IO[C])(implicit resource: Resource[A]): IO[C] =
+    bracket(resource.close)(f)
+
+  /**
+    * Executes the release action only if there was an error.
+    */
+  final def bracketOnError8[B](release: A => IO[Unit])(use: A => IO[B]): IO[B] =
+    bracket0(
+      (r: BracketResult[B], a: A) =>
+        r match {
+          case BracketResult.Failed(_)      => release(a)
+          case BracketResult.Interrupted(_) => release(a)
+          case _                            => IO.unit
+      }
+    )(use)
+
+  /**
+    * Runs the specified cleanup action if this action errors, providing the
+    * error to the cleanup action. The cleanup action will not be interrupted.
+    */
+  final def onError(cleanup: Throwable => IO[Unit]): IO[A] =
+    IO.unit.bracket0(
+      (r: BracketResult[A], a: Unit) =>
+        r match {
+          case BracketResult.Failed(e)      => cleanup(e)
+          case BracketResult.Interrupted(e) => cleanup(e)
+          case _                            => IO.unit
+      }
+    )(_ => self)
 
   /**
     * Forks this action into its own separate fiber, returning immediately
@@ -183,85 +368,15 @@ sealed abstract class IO[A] extends RTS { self =>
   }
 
   /**
-    * When this action represents acquisition of a resource (for example,
-    * opening a file, launching a thread, etc.), `bracket` can be used to ensure
-    * the acquisition is not interrupted and the resource is released.
-    *
-    * The function does two things:
-    *
-    * 1. Ensures this action, which acquires the resource, will not be
-    * interrupted. Of course, acquisition may fail for internal reasons (an
-    * uncaught exception).
-    * 2. Ensures the `release` action will not be interrupted, and will be
-    * executed so long as this action successfully acquires the resource.
-    *
-    * In between acquisition and release of the resource, the `use` action is
-    * executed.
-    *
-    * If the `release` action fails, then the entire computation will fail even
-    * if the `use` action succeeds. If this fail-fast behavior is not desired,
-    * errors produced by the `release` action can be caught and ignored.
-    *
-    * {{{
-    * openFile("data.json").bracket(closeFile) { file =>
-    *   for {
-    *     header <- readHeader(file)
-    *     ...
-    *   } yield result
-    * }
-    * }}}
-    */
-  final def bracket[B](release: A => IO[Unit])(use: A => IO[B]): IO[B] =
-    IO.Bracket(this, (_: BracketResult[B], a: A) => release(a), use)
-
-  /**
-    * A more powerful version of `bracket` that provides information on whether
-    * or not `use` succeeded to the release action.
-    */
-  final def bracket0[B](release: (BracketResult[B], A) => IO[Unit])(
-      use: A => IO[B]): IO[B] =
-    IO.Bracket(this, release, use)
-
-  /**
-    * A less powerful variant of `bracket` where the value produced by this
-    * action is not needed.
-    */
-  final def bracket_[B](release: IO[Unit])(use: IO[B]): IO[B] =
-    self.bracket(_ => release)(_ => use)
-
-  /**
     * Executes the specified finalizer, whether this action succeeds, fails, or
     * is interrupted.
     */
-  final def ensuring(finalizer: IO[Unit]): IO[A] =
+  final def ensuring0(finalizer: IO[Unit]): IO[A] =
     IO.unit.bracket(_ => finalizer)(_ => self)
 
-  /**
-    * Executes the release action only if there was an error.
-    */
-  final def bracketOnError[B](release: A => IO[Unit])(use: A => IO[B]): IO[B] =
-    bracket0(
-      (r: BracketResult[B], a: A) =>
-        r match {
-          case BracketResult.Failed(_)      => release(a)
-          case BracketResult.Interrupted(_) => release(a)
-          case _                            => IO.unit
-      }
-    )(use)
-
-  /**
-    * Runs the specified cleanup action if this action errors, providing the
-    * error to the cleanup action. The cleanup action will not be interrupted.
-    */
-  final def onError(cleanup: Throwable => IO[Unit]): IO[A] =
-    IO.unit.bracket0(
-      (r: BracketResult[A], a: Unit) =>
-        r match {
-          case BracketResult.Failed(e)      => cleanup(e)
-          case BracketResult.Interrupted(e) => cleanup(e)
-          case _                            => IO.unit
-      }
-    )(_ => self)
+  /**Like "bracket", but takes only a computation to run afterward. Generalizes "finally". */
+  def ensuring[B](sequel: IO[B]): IO[A] =
+    IO.unit.bracket(_ => sequel.toUnit)(_ => self)
 
   /**
     * Supervises this action, which ensures that any fibers that are forked
@@ -393,23 +508,173 @@ sealed abstract class IO[A] extends RTS { self =>
     */
   def tag: Int
 
+}
 
-  /** Lift this action to a given IO-like monad. */
-  def liftIO[M[_]](implicit m: MonadIO[M]): M[A] =
-    m.liftIO(self)
+sealed abstract class IOInstances1 {
+  implicit def IOSemigroup[A](implicit A: Semigroup[A]): Semigroup[IO[A]] =
+    Semigroup.liftSemigroup[IO, A](IO.ioMonad, A)
 
-  /**Like "finally", but only performs the final action if there was an exception. */
-  def onException[B](action: IO[B]): IO[A] = self except (e => for {
-    _ <- action
-    a <- (throw e): IO[A]
-  } yield a)
+  implicit val iOLiftIO: LiftIO[IO] = new IOLiftIO {}
 
-  /** Executes the handler if an exception is raised. */
-  def except(handler: Throwable => IO[A]): IO[A] =
-    attempt.flatMap(_.fold(handler, a => IO.point(a)))
+  implicit val ioMonad: Monad[IO] with BindRec[IO] = new IOMonad {}
+}
+
+sealed abstract class IOInstances0 extends IOInstances1 {
+  implicit def IOMonoid[A](implicit A: Monoid[A]): Monoid[IO[A]] =
+    Monoid.liftMonoid[IO, A](ioMonad, A)
+
+  implicit val ioMonadIO: MonadIO[IO] = new MonadIO[IO] with IOLiftIO
+  with IOMonad
+}
+
+sealed abstract class IOInstances extends IOInstances0 {
+  implicit val ioMonadCatchIO: MonadCatchIO[IO] = new IOMonadCatchIO
+  with IOLiftIO with IOMonad
+
+  implicit val ioCatchable: Catchable[IO] =
+    new Catchable[IO] {
+      def attempt[A](f: IO[A]): IO[Throwable \/ A] = f.attempt
+      def fail[A](err: Throwable): IO[A] = IO.fail(err)
+    }
+
+}
+
+private trait IOMonad extends Monad[IO] with BindRec[IO] {
+  def point[A](a: => A): IO[A] = IO.point(a)
+  override def map[A, B](fa: IO[A])(f: A => B) = fa map f
+  def bind[A, B](fa: IO[A])(f: A => IO[B]): IO[B] = fa flatMap f
+  def tailrecM[A, B](f: A => IO[A \/ B])(a: A): IO[B] = IO.tailrecM(f)(a)
+}
+
+private trait IOLiftIO extends LiftIO[IO] {
+  def liftIO[A](ioa: IO[A]) = ioa
+}
+
+private trait IOMonadCatchIO extends MonadCatchIO[IO] {
+  def except[A](io: IO[A])(h: Throwable => IO[A]): IO[A] = io.catchAll(h)
 }
 
 object IO extends IOInstances {
+  def apply[A](a: => A): IO[A] =
+    sync(a)
+
+  /** Reads a character from standard input. */
+  def getChar: IO[Char] = IO.sync {
+    val s = scala.Console.in.readLine()
+    if (s == null)
+      throw new java.io.EOFException("Console has reached end of input")
+    else
+      s charAt 0
+  }
+
+  /** Writes a character to standard output. */
+  def putChar(c: Char): IO[Unit] =
+    sync(print(c))
+
+  /** Writes a string to standard output. */
+  def putStr(s: String): IO[Unit] =
+    sync(print(s))
+
+  /** Writes a string to standard output, followed by a newline.*/
+  def putStrLn(s: String): IO[Unit] =
+    sync(println(s))
+
+  /** Reads a line of standard input. */
+  def readLn: IO[String] = sync(scala.Console.in.readLine())
+
+  def put[A](a: A)(implicit S: Show[A]): IO[Unit] =
+    sync(print(S shows a))
+
+  def putLn[A](a: A)(implicit S: Show[A]): IO[Unit] =
+    sync(println(S shows a))
+
+  type RunInBase[M[_], Base[_]] =
+    Forall[λ[α => M[α] => Base[M[α]]]]
+
+  import scalaz.Isomorphism.<~>
+
+  /** Hoist RunInBase given a natural isomorphism between the two functors */
+  def hoistRunInBase[F[_], G[_]](r: RunInBase[G, IO])(
+      implicit iso: F <~> G): RunInBase[F, IO] =
+    new RunInBase[F, IO] {
+      def apply[B] = (x: F[B]) => r.apply(iso.to(x)).map(iso.from(_))
+    }
+
+  /** Construct an IO action from a world-transition function. */
+  @deprecated("for the love of god do not use this", "blah")
+  def io[A](f: Tower[IvoryTower] => Trampoline[(Tower[IvoryTower], A)]): IO[A] =
+    sync(f(IvoryTower.ivoryTower).extractF.apply()._2)
+
+  // Mutable variables in the IO monad
+  def newIORef[A](a: => A): IO[IORef[A]] =
+    STToIO(newVar(a)) flatMap (v => sync(IORef.ioRef(v)))
+
+  /**Throw the given error in the IO monad. */
+  def throwIO[A](e: Throwable): IO[A] = IO.fail(e)
+
+  def idLiftControl[M[_], A](f: RunInBase[M, M] => M[A])(
+      implicit m: Monad[M]): M[A] =
+    f(new RunInBase[M, M] {
+      def apply[B] = (x: M[B]) => m.point(x)
+    })
+
+  def controlIO[M[_], A](f: RunInBase[M, IO] => IO[M[A]])(
+      implicit M: MonadControlIO[M]): M[A] =
+    M.join(M.liftControlIO(f))
+
+  /**
+    * Register a finalizer in the current region. When the region terminates,
+    * all registered finalizers will be performed if they're not duplicated to a parent region.
+    */
+  def onExit[S, P[_]: MonadIO](
+      finalizer: IO[Unit]): RegionT[S, P, FinalizerHandle[RegionT[S, P, ?]]] =
+    regionT(kleisli(hsIORef =>
+      (for {
+        refCntIORef <- newIORef(1)
+        h = refCountedFinalizer(finalizer, refCntIORef)
+        _ <- hsIORef.mod(h :: _)
+      } yield finalizerHandle[RegionT[S, P, ?]](h)).liftIO[P]))
+
+  /**
+    * Execute a region inside its parent region P. All resources which have been opened in the given
+    * region and which haven't been duplicated using "dup", will be closed on exit from this function
+    * whether by normal termination or by raising an exception.
+    * Also all resources which have been duplicated to this region from a child region are closed
+    * on exit if they haven't been duplicated themselves.
+    * The Forall quantifier prevents resources from being returned by this function.
+    */
+  def runRegionT[P[_]: MonadControlIO, A](r: Forall[RegionT[?, P, A]]): P[A] = {
+    def after(hsIORef: IORef[List[RefCountedFinalizer]]) =
+      for {
+        hs <- hsIORef.read
+        _ <- hs.foldRight[IO[Unit]](IO.unit) {
+          case (r, o) =>
+            for {
+              refCnt <- r.refcount.mod(_ - 1)
+              _ <- if (refCnt == 0) r.finalizer else IO.unit
+            } yield ()
+        }
+      } yield ()
+    newIORef(List[RefCountedFinalizer]()).bracketIO(after)(s =>
+      r.apply.value.run(s))
+  }
+
+  def tailrecM[A, B](f: A => IO[A \/ B])(a: A): IO[B] =
+    f(a).flatMap {
+      case \/-(r) => IO.now(r)
+      case -\/(l) => tailrecM[A, B](f)(l)
+    }
+
+  /** An IO action is an ST action. */
+  implicit def IOToST[A](io: IO[A]): ST[IvoryTower, A] =
+    st(io(_).run)
+
+  /** An IO action that does nothing. */
+  @deprecated("use unit", "blah")
+  val ioUnit: IO[Unit] =
+    now(())
+
+  // IO2
   object Tags {
     final val FlatMap = 0
     final val Point = 1
@@ -492,15 +757,6 @@ object IO extends IOInstances {
   final case class Supervise[A](value: IO[A], error: Throwable) extends IO[A] {
     override final def tag = Tags.Supervise
   }
-
-
-  type RunInBase[M[_], Base[_]] = Forall[λ[α => M[α] => Base[M[α]]]]
-
-  /** Hoist RunInBase given a natural isomorphism between the two functors */
-  def hoistRunInBase[F[_], G[_]](r: RunInBase[G, IO])(implicit iso: F <~> G): RunInBase[F, IO] =
-    new RunInBase[F, IO] {
-      def apply[B] = (x: F[B]) => r.apply(iso.to(x)).map(iso.from(_))
-    }
 
   /**
     * Lifts a strictly evaluated value into the `IO` monad.
@@ -611,25 +867,4 @@ object IO extends IOInstances {
   private final val Never
     : IO[Any] = IO.async[Any] { (k: (Throwable \/ Any) => Unit) =>
     }
-
-  def put[A](a: A)(implicit S: Show[A]): IO[Unit] =
-    for {
-      s <- IO.point(S show a)
-      _ = print(s)
-    } yield ()
-
-  def putLn[A](a: A)(implicit S: Show[A]): IO[Unit] =
-    for {
-      s <- IO.point(S show a)
-      _ = println(s)
-    } yield ()
-}
-
-private[effect] sealed trait IOInstances {
-
-  implicit val ioMonad: Monad[IO] = new Monad[IO] {
-    override def point[A](a: => A): IO[A] = IO.point(a)
-    override def bind[A, B](fa: IO[A])(f: A => IO[B]): IO[B] =
-      fa.flatMap(f)
-  }
 }

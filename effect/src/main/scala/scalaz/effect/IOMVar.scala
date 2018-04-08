@@ -21,7 +21,7 @@ package scalaz.effect
   * } yield i
   * }}}
   */
-trait MVar[A] {
+trait IOMVar[A] {
 
   /**
     * Peeks to see if the `MVar` contains an value. This method returns
@@ -64,16 +64,4 @@ trait MVar[A] {
     * if the `MVar` has a value.
     */
   def tryTake: IO[Option[A]]
-}
-
-object MVar extends MVarFunctions
-
-trait MVarFunctions {
-  def newMVar[A](a: A): IO[MVar[A]] =
-    for {
-      mvar <- newEmptyMVar[A]
-      _    <- mvar.put(a)
-    } yield mvar
-
-  def newEmptyMVar[A]: IO[MVar[A]] = ???
 }

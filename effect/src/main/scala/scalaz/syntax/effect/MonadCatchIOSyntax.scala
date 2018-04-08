@@ -2,7 +2,8 @@ package scalaz
 package syntax
 package effect
 
-import scalaz.effect.{MonadCatchIO, Resource}
+import scalaz.effect.MonadCatchIO
+import scalaz.effect.Resource
 
 /** Wraps a value `self` and provides methods related to `MonadCatchIO` */
 sealed abstract class MonadCatchIOOps[F[_],A] extends Ops[F[A]] {

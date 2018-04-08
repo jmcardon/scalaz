@@ -2,7 +2,7 @@ package scalaz
 package concurrent
 
 
-import scalaz.effect.MVar.newEmptyMVar
+import scalaz.concurrent.MVar.newEmptyMVar
 import scalaz.effect.IO
 
 object MVarTest extends SpecLite {

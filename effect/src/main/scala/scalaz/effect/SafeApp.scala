@@ -1,5 +1,7 @@
-// Copyright (C) 2017 John A. De Goes. All rights reserved.
-package scalaz.effect
+package scalaz
+package effect
+
+import IO._
 
 /**
   * The entry point for a purely-functional application on the JVM.
@@ -18,17 +20,16 @@ package scalaz.effect
   * }
   * }}}
   */
-trait SafeApp extends RTS {
+trait SafeApp {
 
-  /**
-    * The main function of the application, which will be passed the command-line
-    * arguments to the program.
-    */
-  def run(args: List[String]): IO[Unit]
+  def run(args: ImmutableArray[String]): IO[Unit] = runl(args.toList)
 
-  /**
-    * The Scala main function, intended to be called only by the Scala runtime.
-    */
-  final def main(args0: Array[String]): Unit =
-    unsafePerformIO(run(args0.toList))
+  def runl(args: List[String]): IO[Unit] = runc
+
+  def runc: IO[Unit] = unit
+
+  final def main(args: Array[String]): Unit = {
+    run(ImmutableArray.fromArray(args)).unsafePerformIO()
+  }
+
 }

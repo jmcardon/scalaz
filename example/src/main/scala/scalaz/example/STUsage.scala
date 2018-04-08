@@ -1,6 +1,6 @@
 package scalaz.example
 
-import scalaz.effect.effect.ST
+import scalaz.effect.ST
 
 import reflect.ClassTag
 

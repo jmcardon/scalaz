@@ -6,10 +6,10 @@ import java.util.concurrent.atomic.AtomicReference
 import scalaz.effect.MVarInternal._
 import scalaz.{-\/, \/, \/-}
 
-private[concurrent] final class MVarImpl[A](
+private[effect] final class IOMVarImpl[A](
     threadPool: (=> Unit) => Unit,
     val state: AtomicReference[MVarState[A]])
-    extends MVar[A] {
+    extends IOMVar[A] {
   final def peek: IO[Option[A]] = IO.sync {
     state.get match {
       case Surplus(head, _) => Some(head)
@@ -264,7 +264,7 @@ private[concurrent] final class MVarImpl[A](
   }
 }
 
-private[concurrent] object MVarInternal {
+private[effect] object MVarInternal {
   val SuccessUnit: Try[Unit] = \/-(())
 
   type Action[A] = () => AsyncReturn[A]

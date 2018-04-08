@@ -1,7 +1,8 @@
 package scalaz
 package concurrent
 
-import scalaz.effect.{IO, MVar}
+import MVar._
+import effect.IO
 
 sealed abstract class Chan[A] {
   def read: IO[A]

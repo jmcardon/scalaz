@@ -1,14 +1,14 @@
 package scalaz
 package effect
 
-import scalaz.Id.Id
-import scalaz.effect.IvoryTower.ivoryTower
-import ST._
-import STArray._
-import STRef._
-import scalaz.Scalaz._
+import reflect.ClassTag
 
-import scala.reflect.ClassTag
+import IvoryTower._
+import STRef._
+import STArray._
+import ST._
+import std.function._
+import Id._
 
 /**Mutable variable in state thread S containing a value of type A. [[http://research.microsoft.com/en-us/um/people/simonpj/papers/lazy-functional-state-threads.ps.Z]] */
 sealed abstract class STRef[S, A] {
@@ -140,7 +140,8 @@ object ST extends STInstances {
   }
 
   // Implicit conversions between IO and ST
-  implicit def STToIO[A](st: ST[IvoryTower, A]): IO[A] = ???
+  implicit def STToIO[A](st: ST[IvoryTower, A]): IO[A] =
+    IO.io(rw => Free.return_(st(rw)))
 
   /**Put a value in a state thread */
   def returnST[S, A](a: => A): ST[S, A] =
@@ -169,6 +170,7 @@ object ST extends STInstances {
 
   /**Accumulates an integer-associated list into an immutable array. */
   def accumArray[F[_], A : ClassTag, B](size: Int, f: (A, B) => A, z: A, ivs: F[(Int, B)])(implicit F: Foldable[F]): ImmutableArray[A] = {
+    import std.anyVal.unitInstance
     type STA[S] = ST[S, ImmutableArray[A]]
     runST(new Forall[STA] {
       def apply[S] = for {

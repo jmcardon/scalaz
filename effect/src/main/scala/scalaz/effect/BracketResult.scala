@@ -1,7 +1,7 @@
 // Copyright (C) 2017 John A. De Goes. All rights reserved.
-package scalaz
-package effect
+package scalaz.effect
 
+import scalaz.{-\/, \/, \/-}
 
 /**
   * A lightweight description of the result of executing a fiber. The result is

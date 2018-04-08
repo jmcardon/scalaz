@@ -1,7 +1,6 @@
 package scalaz
 package syntax
 package effect
-
 import scalaz.effect.IO
 
 final class IdOps[A](val self: A) extends AnyVal {
