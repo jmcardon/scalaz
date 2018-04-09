@@ -7,7 +7,7 @@ import java.util.concurrent.atomic.AtomicReference
 import MVarInternal._
 import scala.concurrent.ExecutionContext
 
-private[ioeffect] final class MVarImpl[A](threadPool: (() => Unit) => Unit, val state: AtomicReference[MVarState[A]])
+private[ioeffect] final class MVarImpl[A](threadPool: (=> Unit) => Unit, val state: AtomicReference[MVarState[A]])
     extends MVar[A] {
   final def peek: IO[Maybe[A]] = IO.sync {
     state.get match {
@@ -35,7 +35,7 @@ private[ioeffect] final class MVarImpl[A](threadPool: (() => Unit) => Unit, val 
             val (value, putter0) = putters(0)
 
             finish = () => {
-              threadPool(() => putter0(SuccessUnit))
+              threadPool(putter0(SuccessUnit))
 
               AsyncReturn.now(value0)
             }
@@ -160,7 +160,7 @@ private[ioeffect] final class MVarImpl[A](threadPool: (() => Unit) => Unit, val 
           else {
             val (value, putter0) = putters(0)
 
-            finish = () => threadPool(() => putter0(SuccessUnit))
+            finish = () => threadPool(putter0(SuccessUnit))
 
             Surplus(value, putters.tail)
           }
@@ -211,7 +211,7 @@ private[ioeffect] final class MVarImpl[A](threadPool: (() => Unit) => Unit, val 
       if (state.compareAndSet(oldState, newState)) loop = false
     }
 
-    if (removed) threadPool(() => putter(-\/(t)))
+    if (removed) threadPool(putter(-\/(t)))
   }
 
   private final def removeTaker(taker: Callback[A], t: Throwable): Unit = {
@@ -234,7 +234,7 @@ private[ioeffect] final class MVarImpl[A](threadPool: (() => Unit) => Unit, val 
       if (state.compareAndSet(oldState, newState)) loop = false
     }
 
-    if (removed) threadPool(() => taker(-\/(t)))
+    if (removed) threadPool(taker(-\/(t)))
   }
 
   private final def removeReader(reader: Callback[A], t: Throwable): Unit = {
@@ -257,7 +257,7 @@ private[ioeffect] final class MVarImpl[A](threadPool: (() => Unit) => Unit, val 
       if (state.compareAndSet(oldState, newState)) loop = false
     }
 
-    if (removed) threadPool(() => reader(-\/(t)))
+    if (removed) threadPool(reader(-\/(t)))
   }
 }
 
@@ -289,13 +289,13 @@ private[ioeffect] object MVarInternal {
 trait MVarFunctions {
   def newMVar[A](a: A)(ec: ExecutionContext): IO[MVar[A]] = IO.sync {
     new MVarImpl[A](u => ec.execute(new Runnable {
-      def run(): Unit = u()
+      def run(): Unit = u
     }), new AtomicReference[MVarState[A]](one(a)))
   }
 
   def newEmptyMVar[A](ec: ExecutionContext): IO[MVar[A]] = IO.sync {
     new MVarImpl[A](u => ec.execute(new Runnable {
-      def run(): Unit = u()
+      def run(): Unit = u
     }), new AtomicReference[MVarState[A]](empty[A]))
   }
 }
