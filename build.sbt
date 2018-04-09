@@ -22,7 +22,7 @@ lazy val jsProjects = Seq[ProjectReference](
 )
 
 lazy val jvmProjects = Seq[ProjectReference](
-  coreJVM, effectJVM, iterateeJVM, scalacheckBindingJVM_1_12, scalacheckBindingJVM_1_13, testsJVM, concurrent, example
+  coreJVM, effectJVM, iterateeJVM, scalacheckBindingJVM_1_12, scalacheckBindingJVM_1_13, testsJVM, concurrent, example, ioeffect
 )
 
 lazy val nativeProjects = Seq[ProjectReference](
@@ -105,8 +105,8 @@ lazy val ioeffect = Project(
   osgiExport("scalaz.ioeffect"),
   OsgiKeys.importPackage := Seq("javax.swing;resolution:=optional", "*"),
   libraryDependencies ++=
-  Seq("org.specs2" %% "specs2-core"          % "4.0.0" % "test",
-    "org.specs2" %% "specs2-matcher-extra" % "4.0.0" % "test"),
+  Seq("org.specs2" %% "specs2-core"          % "3.9.4" % "test",
+    "org.specs2" %% "specs2-matcher-extra" % "3.9.4" % "test"),
   scalacOptions in Test ++= Seq("-Yrangepos")
 ).dependsOn(
   coreJVM
