@@ -377,9 +377,11 @@ sealed abstract class IO[A] { self =>
    * instance belongs (e.g. `IO.Tags.Point`).
    */
   def tag: Int
+
+  def unsafePerformIO(): A = IO.unsafePerformIO(self)
 }
 
-object IO extends IOInstances {
+object IO extends IOInstances with RTS {
   object Tags {
     final val FlatMap         = 0
     final val Point           = 1

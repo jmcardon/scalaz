@@ -66,3 +66,5 @@ trait MVar[A] {
    */
   def tryTake: IO[Maybe[A]]
 }
+
+object MVar extends MVarFunctions
