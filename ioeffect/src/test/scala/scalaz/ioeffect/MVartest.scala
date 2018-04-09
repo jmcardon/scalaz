@@ -1,7 +1,5 @@
 package scalaz.ioeffect
 
-import java.util.concurrent.Executors
-
 import org.specs2.Specification
 import org.specs2.concurrent.ExecutionEnv
 import org.specs2.specification.AroundTimeout
