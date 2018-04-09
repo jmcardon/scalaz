@@ -5,8 +5,9 @@ package ioeffect
 import java.util.concurrent.atomic.AtomicReference
 
 import MVarInternal._
+import scala.concurrent.ExecutionContext
 
-private[ioeffect] final class MVarImpl[A](threadPool: (=> Unit) => Unit, val state: AtomicReference[MVarState[A]])
+private[ioeffect] final class MVarImpl[A](threadPool: (() => Unit) => Unit, val state: AtomicReference[MVarState[A]])
     extends MVar[A] {
   final def peek: IO[Maybe[A]] = IO.sync {
     state.get match {
@@ -29,12 +30,12 @@ private[ioeffect] final class MVarImpl[A](threadPool: (=> Unit) => Unit, val sta
           if (putters.length == 0) {
             finish = () => AsyncReturn.now(value0)
 
-            Empty
+            empty
           } else {
             val (value, putter0) = putters(0)
 
             finish = () => {
-              threadPool(putter0(SuccessUnit))
+              threadPool(() => putter0(SuccessUnit))
 
               AsyncReturn.now(value0)
             }
@@ -159,7 +160,7 @@ private[ioeffect] final class MVarImpl[A](threadPool: (=> Unit) => Unit, val sta
           else {
             val (value, putter0) = putters(0)
 
-            finish = () => threadPool(putter0(SuccessUnit))
+            finish = () => threadPool(() => putter0(SuccessUnit))
 
             Surplus(value, putters.tail)
           }
@@ -182,7 +183,7 @@ private[ioeffect] final class MVarImpl[A](threadPool: (=> Unit) => Unit, val sta
     else {
       val taker = takers(0)
 
-      (if (takers.length == 1) Empty[A] else Deficit(takers.tail, Vector()), () => {
+      (if (takers.length == 1) empty[A] else Deficit(takers.tail, Vector()), () => {
         readers.foreach(reader => reader(result))
         taker(result)
         AsyncReturn.later[Unit]
@@ -210,7 +211,7 @@ private[ioeffect] final class MVarImpl[A](threadPool: (=> Unit) => Unit, val sta
       if (state.compareAndSet(oldState, newState)) loop = false
     }
 
-    if (removed) threadPool(putter(-\/(t)))
+    if (removed) threadPool(() => putter(-\/(t)))
   }
 
   private final def removeTaker(taker: Callback[A], t: Throwable): Unit = {
@@ -233,7 +234,7 @@ private[ioeffect] final class MVarImpl[A](threadPool: (=> Unit) => Unit, val sta
       if (state.compareAndSet(oldState, newState)) loop = false
     }
 
-    if (removed) threadPool(taker(-\/(t)))
+    if (removed) threadPool(() => taker(-\/(t)))
   }
 
   private final def removeReader(reader: Callback[A], t: Throwable): Unit = {
@@ -256,7 +257,7 @@ private[ioeffect] final class MVarImpl[A](threadPool: (=> Unit) => Unit, val sta
       if (state.compareAndSet(oldState, newState)) loop = false
     }
 
-    if (removed) threadPool(reader(-\/(t)))
+    if (removed) threadPool(() => reader(-\/(t)))
   }
 }
 
@@ -280,5 +281,21 @@ private[ioeffect] object MVarInternal {
   final case class Surplus[A](head: A, tail: Vector[(A, Callback[Unit])])                extends MVarState[A]
   final case class Deficit[A](takers: Vector[Callback[A]], readers: Vector[Callback[A]]) extends MVarState[A]
 
-  def Empty[A] = Deficit[A](Vector(), Vector())
+  def empty[A]: MVarState[A] = Deficit[A](Vector(), Vector())
+
+  def one[A](a: A): MVarState[A] = Surplus[A](a, Vector.empty)
+}
+
+trait MVarFunctions {
+  def newMVar[A](a: A)(ec: ExecutionContext): IO[MVar[A]] = IO.sync {
+    new MVarImpl[A](u => ec.execute(new Runnable {
+      def run(): Unit = u()
+    }), new AtomicReference[MVarState[A]](one(a)))
+  }
+
+  def newEmptyMVar[A](ec: ExecutionContext): IO[MVar[A]] = IO.sync {
+    new MVarImpl[A](u => ec.execute(new Runnable {
+      def run(): Unit = u()
+    }), new AtomicReference[MVarState[A]](empty[A]))
+  }
 }
